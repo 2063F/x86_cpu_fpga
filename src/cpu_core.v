@@ -29,8 +29,8 @@
 //   - PUSH SP pushes the value of SP *before* the decrement (80286+ behavior).
 //   - Memory bus: the request (mem_rd/mem_wr, address, size) is held until
 //     mem_ready is 1. mem_rdata must be valid in the cycle mem_ready is 1.
-//     This works with memory_controller.v (always ready) and with slower
-//     memories that insert wait cycles.
+//     memory_controller.v (synchronous B-SRAM) answers a read in the second
+//     cycle; slower memories may insert more wait cycles.
 // =============================================================================
 
 `include "x86_defines.vh"

@@ -14,7 +14,7 @@ x86 命令セットのサブセットを段階的に実装し、最終的にア�
 |:------|:-----|:-----|
 | 1 | 開発環境セットアップ & LED点滅 | ✅ 完了 |
 | 2 | 基本コンポーネント (ALU, レジスタ, メモリ) | ✅ 完了 |
-| 3 | 最小限CPUコア (8086互換) | ✅ 完了 (シミュレーション検証) |
+| 3 | 最小限CPUコア (8086互換) | ✅ 完了 (シミュレーション検証、実機は未確認) |
 | 4 | UART & デバッグ環境 | 🔧 次のステップ |
 | 5 | 8086命令セット拡張 | ⬜ |
 | 6 | 32ビット拡張 (i386) | ⬜ |
@@ -30,8 +30,9 @@ x86_cpu_fpga/
 │   ├── blinky.v              # LED点滅テスト (Phase 1)
 │   ├── alu.v                 # 32ビットALU (x86フラグ完全対応)
 │   ├── register_file.v       # x86レジスタファイル (8/16/32bit対応)
-│   ├── memory_controller.v   # メモリコントローラ (8KB)
-│   └── cpu_core.v            # CPUコア (8086互換サブセット, Phase 3)
+│   ├── memory_controller.v   # メモリコントローラ (8KB B-SRAM, 同期読み出し)
+│   ├── cpu_core.v            # CPUコア (8086互換サブセット, Phase 3)
+│   └── soc_top.v             # 実機用トップ (CPU + メモリ + LED/ボタン I/O)
 ├── sim/                      # テストベンチ
 │   ├── tb_blinky.v
 │   ├── tb_alu.v
@@ -39,9 +40,13 @@ x86_cpu_fpga/
 │   ├── tb_memory_controller.v
 │   ├── tb_cpu_core.v         # CPUコア テスト (自己診断プログラムを実行)
 │   ├── tb_cpu_cosim.v        # 差分テスト用トレース出力 (tools/cosim.py が使用)
+│   ├── tb_soc_top.v          # 実機用トップのテスト (LEDデモを実行)
 │   └── programs/
 │       ├── cpu_test.asm      # 自己診断プログラム (NASM)
 │       └── cpu_test.hex      # ↑ のアセンブル結果 ($readmemh 形式)
+├── firmware/                 # 実機で動かすプログラム
+│   ├── led_demo.asm          # LEDカウンタ デモ (NASM)
+│   └── led_demo.hex          # ↑ のアセンブル結果 (B-SRAM の初期値)
 ├── tools/
 │   ├── bin2hex.py            # NASM の出力 (.bin) → .hex 変換
 │   └── cosim.py              # Unicorn エミュレータとの差分テスト
@@ -63,8 +68,10 @@ x86_cpu_fpga/
 FETCH → MODRM → DISP → IMM → EA → LOAD → EXECUTE → STORE
 ```
 
-命令に不要なステートは飛ばします (例: `MOV AX, imm16` は FETCH → IMM → EXECUTE の 3 クロック)。
-自己診断プログラムでの平均は 1 命令あたり約 3.4 クロックです。
+命令に不要なステートは飛ばします (例: `MOV AX, imm16` は FETCH → IMM → EXECUTE)。
+メモリは同期読み出しのため、読み出し 1 回に 2 クロックかかります
+(FETCH・MODRM・DISP・IMM・LOAD が各 2 クロック、EA・EXECUTE・STORE が各 1 クロック)。
+自己診断プログラムでの平均は 1 命令あたり約 5.3 クロックです。
 
 ### 実装済みの命令
 
@@ -96,11 +103,54 @@ far `CALL`/`RETF`、`PUSHF`/`POPF`、`XCHG` など。
 | `fault` | 未実装命令で停止中 |
 | `inst_done` `dbg_ip` `dbg_opcode` | デバッグ用 (命令完了パルス、実行中の命令の IP とオペコード) |
 
-### 既知の課題
+## 実機で動かす (Tang Primer 25K)
 
-- `memory_controller.v` は読み出しが非同期のため、合成すると B-SRAM ではなく LUT で実装されます
-  (yosys での概算で約 15,000 LUT + 分散RAM。CPUコアは約 5,000 LUT)。実機に載せる前に、
-  同期読み出し (B-SRAM) への変更が必要です。CPUコア側は `mem_ready` によるウェイトに対応済みです。
+`src/soc_top.v` は CPUコア・メモリ・LED/ボタンをまとめた実機用のトップモジュールです。
+ピン名は `blinky.v` と同じなので、`constraints/` のファイルをそのまま使えます。
+
+> シミュレーションと yosys での合成確認までで、実機ではまだ動作確認していません。
+
+### Gowin EDA での手順
+
+1. プロジェクトに次のファイルを追加します。
+   - `src/soc_top.v` `src/cpu_core.v` `src/alu.v` `src/register_file.v`
+     `src/memory_controller.v` `src/x86_defines.vh`
+   - `constraints/tang_primer_25k.cst` `constraints/timing.sdc`
+2. トップモジュールを `soc_top` にします (`blinky.v` は不要です)。
+3. 合成・配置配線して書き込みます。
+
+メモリの初期値は `firmware/led_demo.hex` から読み込みます (`soc_top` の `INIT_FILE` パラメータ)。
+相対パスのため、合成時にファイルが見つからない場合は `INIT_FILE` を絶対パスに変更してください。
+
+### 期待する動作 (led_demo)
+
+- 2 個の LED が 2 進カウンタとして `00 → 01 → 10 → 11 → 00 …` と変化します (1 ステップ約 0.26 秒)。
+- ユーザーボタンを押している間は逆向きにカウントします。
+- リセットボタンで `00` から再開します。
+- 2 個の LED が交互に点滅し続ける場合は、CPU が未実装命令で停止しています (`fault`)。
+
+### 合成後に確認する点
+
+- リソース使用量: B-SRAM が 4 ブロック使われていること
+  (yosys での概算は LUT 約 5,800 / 23,040、FF 約 400、B-SRAM 4)。
+  B-SRAM が 0 でLUT が大幅に増えている場合は、メモリが B-SRAM として推論されていません。
+- タイミング: 50 MHz (20 ns) を満たしていること。満たさない場合はクロックを下げる必要があります。
+
+### I/O ポート
+
+| ポート | 方向 | 内容 |
+|:-------|:-----|:-----|
+| `0x00` | 書き込み / 読み出し | LED レジスタ (bit 0 = `led[0]`, bit 1 = `led[1]`) |
+| `0x01` | 読み出し | ボタン (bit 0 = ユーザーボタン) |
+
+### プログラムの変更
+
+`firmware/led_demo.asm` を変更したら `.hex` を作り直して、再度合成します。
+
+```bash
+nasm -f bin -o firmware/led_demo.bin firmware/led_demo.asm
+python3 tools/bin2hex.py firmware/led_demo.bin firmware/led_demo.hex
+```
 
 ## ターゲットボード
 
@@ -132,6 +182,10 @@ vvp sim/tb_mem.out
 # CPUコア テスト (自己診断プログラム cpu_test.hex を実行)
 iverilog -I src -o sim/tb_cpu_core.out sim/tb_cpu_core.v src/cpu_core.v src/alu.v src/register_file.v src/memory_controller.v
 vvp sim/tb_cpu_core.out
+
+# 実機用トップ テスト (firmware/led_demo.hex を実行)
+iverilog -I src -o sim/tb_soc_top.out sim/tb_soc_top.v src/soc_top.v src/cpu_core.v src/alu.v src/register_file.v src/memory_controller.v
+vvp sim/tb_soc_top.out
 ```
 
 CPUコア テストに `+trace` を付けると、実行した命令ごとにレジスタの値を表示します。

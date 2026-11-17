@@ -25,7 +25,6 @@
 module tb_cpu_cosim;
 
     localparam ADDR_BITS = 20;                  // 1MB RAM
-    localparam MEM_BYTES = 1 << ADDR_BITS;
 
     reg clk   = 1'b0;
     reg rst_n = 1'b0;
@@ -48,7 +47,8 @@ module tb_cpu_cosim;
     wire [15:0] dbg_ip;
     wire [7:0]  dbg_opcode;
 
-    // Random wait-cycle injection
+    // Random wait-cycle injection: while bus_go is 0 the memory sees no
+    // request, so an access that is cut short has to start again
     reg         stall_en = 1'b0;
     reg  [31:0] lfsr     = 32'h1;
     wire        bus_go   = !stall_en || lfsr[0];
@@ -90,7 +90,7 @@ module tb_cpu_cosim;
         .address     (mem_addr),
         .write_data  (mem_wdata),
         .access_size (mem_size),
-        .read_en     (mem_rd),
+        .read_en     (mem_rd && bus_go),
         .write_en    (mem_wr && bus_go),
         .read_data   (mem_rdata),
         .ready       (mc_ready)
@@ -99,9 +99,8 @@ module tb_cpu_cosim;
     // -------------------------------------------------------------------------
     // Program load, reset
     // -------------------------------------------------------------------------
-    reg [7:0]     image [0:MEM_BYTES-1];
     reg [1023:0]  hex_file, trace_file;
-    integer       fd, i, max_cycles, cycles, stall_seed;
+    integer       fd, max_cycles, cycles, stall_seed;
 
     initial begin
         if (!$value$plusargs("hex=%s", hex_file) ||
@@ -116,22 +115,8 @@ module tb_cpu_cosim;
             lfsr     = stall_seed | 32'h1;
         end
 
-        $readmemh(hex_file, image);
-
         #1;     // after memory_controller's own zero-initialization
-        for (i = 0; i < MEM_BYTES; i = i + 1) begin
-            // Only the low 320KB and the reset vector are used by the tests
-            if (i == 20'h50000)
-                i = 20'hFFFF0;
-            if (image[i] !== 8'hxx) begin
-                case (i[1:0])
-                    2'd0: mem.mem_bank0[i >> 2] = image[i];
-                    2'd1: mem.mem_bank1[i >> 2] = image[i];
-                    2'd2: mem.mem_bank2[i >> 2] = image[i];
-                    2'd3: mem.mem_bank3[i >> 2] = image[i];
-                endcase
-            end
-        end
+        $readmemh(hex_file, mem.mem);
 
         fd = $fopen(trace_file, "w");
 

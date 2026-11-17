@@ -140,24 +140,14 @@ module tb_cpu_core;
         input [12:0] addr;
         input [7:0]  data;
         begin
-            case (addr[1:0])
-                2'd0: mem.mem_bank0[addr >> 2] = data;
-                2'd1: mem.mem_bank1[addr >> 2] = data;
-                2'd2: mem.mem_bank2[addr >> 2] = data;
-                2'd3: mem.mem_bank3[addr >> 2] = data;
-            endcase
+            mem.mem[addr] = data;
         end
     endtask
 
     function [7:0] peek;                        // read one byte of RAM
         input [12:0] addr;
         begin
-            case (addr[1:0])
-                2'd0: peek = mem.mem_bank0[addr >> 2];
-                2'd1: peek = mem.mem_bank1[addr >> 2];
-                2'd2: peek = mem.mem_bank2[addr >> 2];
-                2'd3: peek = mem.mem_bank3[addr >> 2];
-            endcase
+            peek = mem.mem[addr];
         end
     endfunction
 
