@@ -1,0 +1,9 @@
+# Simulation outputs
+*.out
+*.vcd
+
+# Assembler output (the .hex files used by the testbenches are committed)
+sim/programs/*.bin
+
+# Python
+__pycache__/

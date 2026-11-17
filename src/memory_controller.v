@@ -3,9 +3,10 @@
 // =============================================================================
 // Provides byte/word/dword access to Block SRAM.
 // Initial implementation: 8KB (sufficient for early testing).
+// The size is 2^ADDR_BITS bytes; testbenches may override ADDR_BITS.
 // Supports unaligned access by splitting into multiple aligned accesses.
 //
-// Memory Map (initial):
+// Memory Map (initial, ADDR_BITS = 13):
 //   0x00000 - 0x01FFF : RAM (8KB, backed by B-SRAM)
 //   0xFFFF0 - 0xFFFFF : Boot vector area (mapped to top of RAM)
 //
@@ -14,7 +15,9 @@
 
 `include "x86_defines.vh"
 
-module memory_controller (
+module memory_controller #(
+    parameter ADDR_BITS = 13           // RAM size = 2^ADDR_BITS bytes (13 = 8KB)
+) (
     input  wire        clk,
     input  wire        rst_n,
 
@@ -32,11 +35,10 @@ module memory_controller (
 );
 
     // =========================================================================
-    // Memory Array - 8KB = 8192 bytes
+    // Memory Array - 2^ADDR_BITS bytes (default 8KB = 8192 bytes)
     // Implemented as 4 byte-wide banks for individual byte access
     // =========================================================================
-    localparam MEM_SIZE = 8192;        // 8KB
-    localparam ADDR_BITS = 13;         // log2(8192) = 13 bits
+    localparam MEM_SIZE = 1 << ADDR_BITS;
 
     // 4 byte banks for 32-bit word, byte-addressable
     reg [7:0] mem_bank0 [0:MEM_SIZE/4-1];  // Byte 0 (LSB)
@@ -57,7 +59,7 @@ module memory_controller (
     // For boot vector area: map to top of RAM
     // For normal area: direct mapping with wrap
     assign mapped_addr = is_boot_vector ?
-                         (MEM_SIZE - 16 + {9'd0, address[3:0]}) :
+                         {{(ADDR_BITS-4){1'b1}}, address[3:0]} :
                          address[ADDR_BITS-1:0];
 
     // Word-aligned address (for bank indexing)

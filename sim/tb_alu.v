@@ -79,6 +79,27 @@ module tb_alu;
         end
     endtask
 
+    // Check only the auxiliary carry flag (carry/borrow out of bit 3)
+    task check_af;
+        input        expected_af;
+        input [255:0] test_name;
+        begin
+            test_num = test_num + 1;
+            #1; // Allow combinational propagation
+
+            if (flag_af !== expected_af) begin
+                $display("FAIL [%0d] %0s", test_num, test_name);
+                $display("  Operands: A=0x%08h, B=0x%08h, Op=%0d, Size=%0d, Cin=%b",
+                         operand_a, operand_b, alu_op, operand_size, carry_in);
+                $display("  Expected: AF=%b  Got: AF=%b", expected_af, flag_af);
+                fail_count = fail_count + 1;
+            end else begin
+                $display("PASS [%0d] %0s", test_num, test_name);
+                pass_count = pass_count + 1;
+            end
+        end
+    endtask
+
     task set_inputs;
         input [31:0] a;
         input [31:0] b;
@@ -228,6 +249,29 @@ module tb_alu;
 
         set_inputs(32'h0000_0005, 32'h0000_0003, `ALU_ADC, `SIZE_32, 1);
         check_result(32'h0000_0009, 0, 0, 0, 0, "ADC 5+3+1=9");
+
+        // =====================================================================
+        // Auxiliary Carry Flag Tests
+        // =====================================================================
+        $display("\n--- AF Tests ---");
+
+        set_inputs(32'h0000_000F, 32'h0000_0001, `ALU_ADD, `SIZE_8, 0);
+        check_af(1, "ADD 0F+01 AF");
+
+        set_inputs(32'h0000_0008, 32'h0000_0007, `ALU_ADD, `SIZE_8, 0);
+        check_af(0, "ADD 08+07 no AF");
+
+        set_inputs(32'h0000_000F, 32'h0000_0000, `ALU_ADC, `SIZE_8, 1);
+        check_af(1, "ADC 0F+00+1 AF");
+
+        set_inputs(32'h0000_0010, 32'h0000_0001, `ALU_SUB, `SIZE_8, 0);
+        check_af(1, "SUB 10-01 AF");
+
+        set_inputs(32'h0000_0010, 32'h0000_000F, `ALU_SBB, `SIZE_8, 1);
+        check_af(1, "SBB 10-0F-1 AF");
+
+        set_inputs(32'h0000_001F, 32'h0000_000F, `ALU_SBB, `SIZE_8, 0);
+        check_af(0, "SBB 1F-0F-0 no AF");
 
         // =====================================================================
         // Summary

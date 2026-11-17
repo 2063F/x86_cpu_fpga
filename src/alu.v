@@ -83,7 +83,7 @@ module alu (
                 result_ext = {1'b0, operand_a & size_mask} + {1'b0, operand_b & size_mask};
                 result     = result_ext[31:0];
                 cf_out     = result_ext[msb_pos + 1];
-                af_out     = (operand_a[3:0] + operand_b[3:0]) > 4'hF;
+                af_out     = ({1'b0, operand_a[3:0]} + {1'b0, operand_b[3:0]}) > 5'hF;
                 // Signed overflow: both operands same sign, result different sign
                 of_out     = (sign_a == sign_b) && (sign_r != sign_a);
             end
@@ -118,7 +118,7 @@ module alu (
                 result_ext = {1'b0, operand_a & size_mask} - {1'b0, operand_b & size_mask} - {32'd0, carry_in};
                 result     = result_ext[31:0];
                 cf_out     = result_ext[32];
-                af_out     = operand_a[3:0] < (operand_b[3:0] + {3'd0, carry_in});
+                af_out     = {1'b0, operand_a[3:0]} < ({1'b0, operand_b[3:0]} + {4'd0, carry_in});
                 of_out     = (sign_a != sign_b) && (sign_r != sign_a);
             end
 

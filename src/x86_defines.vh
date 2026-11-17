@@ -71,14 +71,18 @@
 `define FLAG_OF   11    // Overflow Flag
 
 // =========================================================================
-// CPU States (for multi-cycle state machine)
+// CPU States (multi-cycle state machine in cpu_core.v)
 // =========================================================================
-`define CPU_RESET       4'h0
-`define CPU_FETCH       4'h1
-`define CPU_DECODE      4'h2
-`define CPU_EXECUTE     4'h3
-`define CPU_MEMORY      4'h4
-`define CPU_WRITEBACK   4'h5
-`define CPU_HALT        4'hF
+`define CPU_FETCH       4'h0    // Opcode / prefix byte fetch
+`define CPU_MODRM       4'h1    // ModR/M byte fetch
+`define CPU_DISP        4'h2    // Displacement fetch (8/16 bit)
+`define CPU_IMM         4'h3    // Immediate fetch (8/16 bit)
+`define CPU_IMM2        4'h4    // Second immediate (far pointer segment)
+`define CPU_EA          4'h5    // Effective address calculation
+`define CPU_LOAD        4'h6    // Memory operand read
+`define CPU_EXECUTE     4'h7    // Execute / register writeback
+`define CPU_STORE       4'h8    // Memory operand write
+`define CPU_HALT        4'hE    // Stopped by HLT
+`define CPU_FAULT       4'hF    // Stopped by unimplemented opcode
 
 `endif // X86_DEFINES_VH
