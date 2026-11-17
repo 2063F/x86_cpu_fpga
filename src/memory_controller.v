@@ -181,9 +181,9 @@ module memory_controller (
     // =========================================================================
     // Memory Initialization (for simulation / boot code loading)
     // =========================================================================
+    integer i;
     initial begin
         // Initialize memory to zero
-        integer i;
         for (i = 0; i < MEM_SIZE/4; i = i + 1) begin
             mem_bank0[i] = 8'h00;
             mem_bank1[i] = 8'h00;
