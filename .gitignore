@@ -5,6 +5,7 @@
 # Assembler output (the .hex files used by the testbenches are committed)
 sim/programs/*.bin
 firmware/*.bin
+firmware/examples/*.bin
 
 # Python
 __pycache__/

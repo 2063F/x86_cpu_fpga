@@ -1,12 +1,14 @@
 // =============================================================================
-// tb_soc_top.v - Testbench for soc_top (CPU + memory + LED/button I/O)
+// tb_soc_top.v - Testbench for soc_top running the LED demo
 // =============================================================================
 // Runs firmware/led_demo.hex with a shortened delay and checks the LED
 // counter, the user button, the reset button and the FAULT indication.
+// (The UART monitor is tested by tb_soc_monitor.v.)
 //
 // Run from the repository root:
 //   iverilog -I src -o sim/tb_soc_top.out sim/tb_soc_top.v src/soc_top.v \
-//            src/cpu_core.v src/alu.v src/register_file.v src/memory_controller.v
+//            src/cpu_core.v src/alu.v src/register_file.v src/memory_controller.v \
+//            src/uart.v src/debug_reporter.v
 //   vvp sim/tb_soc_top.out
 // =============================================================================
 
@@ -30,6 +32,8 @@ module tb_soc_top;
         .clk      (clk),
         .rst_btn  (rst_btn),
         .user_btn (user_btn),
+        .uart_rx  (1'b1),
+        .uart_tx  (),
         .led      (led)
     );
 
@@ -87,12 +91,13 @@ module tb_soc_top;
         $display("  SoC Top Testbench (firmware/led_demo.hex)");
         $display("=============================================================");
 
-        // Shorten the firmware delay: delay_outer = 2, delay_inner = 3
+        // Shorten the firmware delay (first two words of the ROM):
+        // delay_outer = 2, delay_inner = 3
         #1;
-        dut.u_mem.mem[13'h0010] = 8'd2;
-        dut.u_mem.mem[13'h0011] = 8'd0;
-        dut.u_mem.mem[13'h0012] = 8'd3;
-        dut.u_mem.mem[13'h0013] = 8'd0;
+        dut.u_rom.mem[12'h000] = 8'd2;
+        dut.u_rom.mem[12'h001] = 8'd0;
+        dut.u_rom.mem[12'h002] = 8'd3;
+        dut.u_rom.mem[12'h003] = 8'd0;
 
         // =====================================================================
         // Power-on reset, counting up
@@ -144,7 +149,7 @@ module tb_soc_top;
         // FAULT indication (unimplemented opcode 0F at the program start)
         // =====================================================================
         $display("\n--- FAULT indication ---");
-        dut.u_mem.mem[13'h0100] = 8'h0F;
+        dut.u_rom.mem[12'h010] = 8'h0F;
         press_reset;
         cycles = 0;
         while (!dut.cpu_fault && cycles < TIMEOUT) begin
